@@ -6,6 +6,7 @@ This repo now supports two categories of export:
 
 - Trade history: every stock or options order returned by Robinhood, including closed positions.
 - Current holdings: the positions you currently hold, based on Robinhood's positions endpoints.
+- Complete account snapshot: one command that exports both history and holdings.
 
 The project is based on the Robinhood library by Rohan Pai. Read the back story on the original stock trade exporter on the [blog post](http://www.onlineaspect.com/2015/12/17/export-robinhood-investments-to-csv).
 
@@ -48,6 +49,29 @@ export RH_DEVICE_TOKEN='your_device_token'
 If you do not provide a device token, the login helper generates one automatically. If Robinhood prompts for MFA, the scripts will ask for it unless `RH_MFA` or `--mfa_code` is provided.
 
 ## What Each Script Exports
+
+### Complete account snapshot
+
+```bash
+python3 export-all.py
+```
+
+Default outputs:
+
+- `robinhood.csv`
+- `option-trades.csv`
+- `stock-holdings.csv`
+- `option-holdings.csv`
+
+This is the wrapper command for users who want the full picture of their Robinhood account in one run. It logs in once, exports stock and options trade history, and exports current stock and options holdings.
+
+Optional flags:
+
+- `--output-dir exports` writes all files into a specific directory
+- `--include-closed` includes zero-quantity positions in the holdings exports
+- `--dividends` also exports `dividends.csv`
+- `--profit` also generates profit CSVs for trade history
+- `--debug` saves raw API payloads for each export
 
 ### Stock trade history
 
@@ -129,6 +153,12 @@ python3 csv-export.py
 python3 csv-options-export.py
 python3 csv-holdings-export.py
 python3 csv-options-holdings-export.py
+```
+
+Or use the wrapper command:
+
+```bash
+python3 export-all.py
 ```
 
 ## Device Token
