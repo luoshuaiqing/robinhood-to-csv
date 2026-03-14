@@ -40,6 +40,7 @@ Supported environment variables:
 
 - `RH_USERNAME`
 - `RH_PASSWORD`
+- `RH_ACCESS_TOKEN`
 - `RH_DEVICE_TOKEN`
 - `RH_MFA`
 
@@ -54,11 +55,53 @@ Then edit `.env` with your values:
 ```bash
 RH_USERNAME=your_robinhood_username
 RH_PASSWORD=your_robinhood_password
+RH_ACCESS_TOKEN=
 RH_MFA=123456
 RH_DEVICE_TOKEN=your_device_token
 ```
 
 If you do not provide a device token, the login helper generates one automatically. If Robinhood prompts for MFA, the scripts will ask for it unless `RH_MFA` or `--mfa_code` is provided.
+
+## Token Login
+
+Robinhood's password login flow is unstable for unofficial clients. This repo now supports a bearer token flow that skips the blocked OAuth password grant.
+
+You can pass a token either through `RH_ACCESS_TOKEN` in `.env` or `--access-token` on the command line.
+
+Example:
+
+```bash
+python3 export-all.py --access-token 'your_token_here'
+```
+
+Browser token workflow:
+
+1. Log in to Robinhood in your browser.
+2. Open developer tools and go to the `Application` or `Storage` tab.
+3. Find the Robinhood cookies for `robinhood.com`.
+4. Copy the value of `__Host-Web-App-Secondary-Access-Token`.
+5. Put that value into `RH_ACCESS_TOKEN` and rerun the exporter.
+
+When `RH_ACCESS_TOKEN` is set, the scripts try token auth first and only fall back to username/password if the token is rejected.
+
+## Safer cmux Flow
+
+If you are logged into Robinhood inside a `cmux` browser surface, use the wrapper below instead of copying tokens by hand:
+
+```bash
+python3 export-from-cmux.py --cmux-surface surface:13 --dividends --output-dir exports
+```
+
+By default this flow:
+
+- reads the primary Robinhood access token from the logged-in `cmux` browser surface
+- runs the full export without writing the token into repo files
+- clears Robinhood auth state from that `cmux` browser surface after the export finishes
+- blanks `RH_ACCESS_TOKEN` in `.env` if it was set there
+
+Pass `--keep-auth` only if you intentionally want to stay logged in inside that `cmux` browser surface after export.
+
+This cleanup does not erase shell history, agent tool logs, or previously approved command prefixes outside the repo.
 
 ## What Each Script Exports
 

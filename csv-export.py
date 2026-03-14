@@ -24,6 +24,8 @@ parser.add_argument(
 parser.add_argument(
     '--device_token', help='your device token')
 parser.add_argument(
+    '--access-token', default='', help='your Robinhood bearer token')
+parser.add_argument(
     '--profit', action='store_true', help='calculate profit for each sale')
 parser.add_argument(
     '--dividends', action='store_true', help='export dividend payments')
@@ -32,13 +34,21 @@ username = args.username
 password = args.password
 mfa_code = args.mfa_code
 device_token = args.device_token
+access_token = args.access_token
 
 load_dotenv(find_dotenv())
 
 robinhood = Robinhood()
 
 # login to Robinhood
-logged_in = collect_login_data(robinhood_obj=robinhood, username=username, password=password, device_token=device_token, mfa_code=mfa_code)
+logged_in = collect_login_data(
+    robinhood_obj=robinhood,
+    username=username,
+    password=password,
+    device_token=device_token,
+    mfa_code=mfa_code,
+    access_token=access_token,
+)
 
 filename, _ = export_stock_history(robinhood=robinhood, debug=args.debug)
 

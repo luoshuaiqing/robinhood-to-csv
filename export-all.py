@@ -27,6 +27,7 @@ parser.add_argument("--username", default="", help="your Robinhood username")
 parser.add_argument("--password", default="", help="your Robinhood password")
 parser.add_argument("--mfa_code", help="your Robinhood mfa_code")
 parser.add_argument("--device_token", help="your device token")
+parser.add_argument("--access-token", default="", help="your Robinhood bearer token")
 parser.add_argument(
     "--include-closed",
     action="store_true",
@@ -61,6 +62,7 @@ collect_login_data(
     password=args.password,
     device_token=args.device_token,
     mfa_code=args.mfa_code,
+    access_token=args.access_token,
 )
 
 stock_history_filename, _ = export_stock_history(
