@@ -29,10 +29,8 @@ def collect_login_data(robinhood_obj, username, password, device_token, mfa_code
 
         if device_token == None:
             device_token = os.getenv("RH_DEVICE_TOKEN", "")
-            print("device token: ", device_token)
         if device_token == "":
-            device_token = uuid.uuid1()
-            print("Generated device token:", device_token)
+            device_token = str(uuid.uuid4())
 
         logged_in = robinhood_obj.login(username=username, password=password, device_token=device_token)
 

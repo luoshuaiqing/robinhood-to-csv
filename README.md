@@ -30,6 +30,12 @@ pip install -r requirements.txt
 
 The scripts accept credentials either interactively or through environment variables.
 
+Safest usage:
+
+- Prefer interactive prompts for your password instead of passing `--password` on the command line.
+- If you want non-interactive runs, copy `.env.example` to `.env` and keep it local. `.env` is ignored by git in this repo.
+- Avoid `--debug` unless you need it, because it writes raw Robinhood API responses to local files.
+
 Supported environment variables:
 
 - `RH_USERNAME`
@@ -40,10 +46,16 @@ Supported environment variables:
 Example:
 
 ```bash
-export RH_USERNAME='your_robinhood_username'
-export RH_PASSWORD='your_robinhood_password'
-export RH_MFA='123456'
-export RH_DEVICE_TOKEN='your_device_token'
+cp .env.example .env
+```
+
+Then edit `.env` with your values:
+
+```bash
+RH_USERNAME=your_robinhood_username
+RH_PASSWORD=your_robinhood_password
+RH_MFA=123456
+RH_DEVICE_TOKEN=your_device_token
 ```
 
 If you do not provide a device token, the login helper generates one automatically. If Robinhood prompts for MFA, the scripts will ask for it unless `RH_MFA` or `--mfa_code` is provided.
