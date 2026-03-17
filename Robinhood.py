@@ -71,23 +71,20 @@ class Robinhood:
         self.password = password
         self.mfa_code = mfa_code
         self.device_token = device_token
+        fields = {
+            'password': self.password,
+            'username': self.username,
+            'grant_type': 'password',
+            'client_id': self.client_id,
+            'device_token': self.device_token,
+            'scope': 'internal',
+            'expires_in': 86400,
+            'try_passkeys': False,
+            'token_request_path': '/login',
+            'create_read_only_secondary_token': True
+        }
         if mfa_code:
-            fields = {
-                'password' : self.password,
-                'username' : self.username,
-                'mfa_code': self.mfa_code,
-                'grant_type': 'password',
-                'client_id': self.client_id,
-                'device_token': self.device_token
-            }
-        else: 
-            fields = {
-                'password' : self.password,
-                'username' : self.username,
-                'grant_type': 'password',
-                'client_id': self.client_id,
-                'device_token':self.device_token
-            }
+            fields['mfa_code'] = self.mfa_code
         try:
             data = urllib.urlencode(fields) #py2
         except:
@@ -100,6 +97,23 @@ class Robinhood:
             return res
         self.headers['Authorization'] = 'Bearer ' + self.auth_token
         return True
+
+    def set_auth_token(self, auth_token):
+        self.auth_token = auth_token.strip()
+        self.headers['Authorization'] = 'Bearer ' + self.auth_token
+        self.session.headers = self.headers
+
+    def validate_auth_token(self):
+        try:
+            res = self.session.get(self.endpoints['user'])
+            data = res.json()
+        except ValueError:
+            return {"detail": "Token validation failed."}
+
+        if res.ok and isinstance(data, dict) and data.get("url"):
+            return True
+
+        return data
 
     ##############################
     #GET DATA 
