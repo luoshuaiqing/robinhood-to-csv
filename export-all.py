@@ -12,6 +12,7 @@ from exporters import export_options_holdings
 from exporters import export_stock_history
 from exporters import export_stock_holdings
 from login_data import collect_login_data
+from profit_extractor import export_wash_sale_candidates
 from profit_extractor import profit_extractor
 
 
@@ -48,6 +49,16 @@ parser.add_argument(
     action="store_true",
     help="also generate profit CSVs for stock and options trade history",
 )
+parser.add_argument(
+    "--include-non-filled",
+    action="store_true",
+    help="include non-filled stock orders in the stock history export",
+)
+parser.add_argument(
+    "--wash-sales",
+    action="store_true",
+    help="also generate a wash-sale screening CSV for stock history",
+)
 args = parser.parse_args()
 
 load_dotenv(find_dotenv())
@@ -70,6 +81,7 @@ stock_history_filename, _ = export_stock_history(
     debug=args.debug,
     filename=output_path(args.output_dir, "robinhood.csv"),
     prompt=False,
+    include_non_filled=args.include_non_filled,
 )
 
 options_history_filename, _ = export_options_history(
@@ -108,6 +120,9 @@ if args.profit and stock_history_filename:
 
 if args.profit and options_history_filename:
     profit_extractor("", options_history_filename)
+
+if args.wash_sales and stock_history_filename:
+    export_wash_sale_candidates(stock_history_filename)
 
 print("Complete account export finished.")
 print("Trade history: {}".format(stock_history_filename or "not generated"))

@@ -19,8 +19,10 @@ RH_MFA=your_mfa_code               # optional; prompted if MFA is enabled
 
 Preferred Robinhood auth/export flow:
 
-- If the user is already logged into Robinhood inside a `cmux` browser surface, use the `robinhood-cmux-export` skill and `python export-from-cmux.py --cmux-surface <surface> --dividends --output-dir exports`.
-- Prefer this over manual token copying. The wrapper reads the live browser auth, runs the export, and clears browser auth state after completion unless `--keep-auth` is explicitly requested.
+- If the user is already logged into Robinhood in a normal local browser, prefer the browser-cookie flow over `cmux`.
+- Use `python export-from-browser-cookies.py --browser auto --dividends --wash-sales --output-dir exports`.
+- This reads the Robinhood access token from the local browser cookie store with `browser_cookie3`, runs the export, and avoids depending on `cmux` browser socket stability.
+- Treat `export-from-cmux.py` as a fallback only if browser-cookie extraction is not available.
 
 ## Running the scripts
 

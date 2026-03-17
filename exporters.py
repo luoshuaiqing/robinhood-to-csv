@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import collections
+import csv
 from decimal import Decimal, InvalidOperation
 
 
@@ -50,38 +51,59 @@ def prompt_for_filename(default_filename):
 
 
 def write_csv(fields, default_filename, filename=None, prompt=True):
-    if not fields:
+    if isinstance(fields, dict):
+        rows = [fields[key] for key in sorted(fields.keys())]
+    else:
+        rows = list(fields)
+
+    if not rows:
         print("No rows found to export.")
         return None
 
-    keys = sorted(fields[0].keys())
-    csv = ",".join(keys) + "\n"
-
-    for row in fields:
-        for idx, key in enumerate(keys):
-            if idx > 0:
-                csv += ","
-            try:
-                csv += str(fields[row][key])
-            except Exception:
-                csv += ""
-        csv += "\n"
+    keys = []
+    for row in rows:
+        for key in row.keys():
+            if key not in keys:
+                keys.append(key)
 
     if not filename:
         filename = prompt_for_filename(default_filename) if prompt else default_filename
 
     try:
         with open(filename, "w+") as outfile:
-            outfile.write(csv)
-        print("Wrote {} rows to {}.".format(len(fields), filename))
+            writer = csv.DictWriter(outfile, fieldnames=keys, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+        print("Wrote {} rows to {}.".format(len(rows), filename))
         return filename
     except IOError:
         print("Oops. Unable to write file to {}.".format(filename))
         return None
 
 
-def build_stock_history_rows(robinhood, orders):
-    fields = collections.defaultdict(dict)
+def money_amount(value):
+    if isinstance(value, dict):
+        return value.get("amount", "")
+    return value or ""
+
+
+def first_execution(executions):
+    if executions:
+        return executions[0]
+    return {}
+
+
+def derive_stock_execution_state(order):
+    executions = order.get("executions", [])
+    if executions:
+        if as_decimal(order.get("cumulative_quantity")) < as_decimal(order.get("quantity")):
+            return "partially filled"
+        return "completed"
+    return order.get("state", "")
+
+
+def build_stock_history_rows(robinhood, orders, include_non_filled=False):
+    fields = []
     trade_count = 0
     queued_count = 0
     cached_instruments = {}
@@ -90,31 +112,53 @@ def build_stock_history_rows(robinhood, orders):
     page = 0
     current_orders = orders
     while paginated:
-        for i, order in enumerate(current_orders["results"]):
-            executions = order["executions"]
+        for order in current_orders["results"]:
+            executions = order.get("executions", [])
+            execution = first_execution(executions)
+            if not include_non_filled and order.get("state") != "filled":
+                if order.get("state") == "queued":
+                    queued_count += 1
+                continue
 
             symbol = cached_instruments.get(order["instrument"], False)
             if not symbol:
                 symbol = robinhood.get_custom_endpoint(order["instrument"])["symbol"]
                 cached_instruments[order["instrument"]] = symbol
 
-            fields[i + (page * 100)]["symbol"] = symbol
-
-            for key, value in enumerate(order):
-                if value != "executions":
-                    fields[i + (page * 100)][value] = order[value]
-
-            fields[i + (page * 100)]["num_of_executions"] = len(executions)
-            fields[i + (page * 100)]["execution_state"] = order["state"]
+            fields.append(
+                {
+                    "order_id": order.get("id", ""),
+                    "symbol": symbol,
+                    "side": order.get("side", ""),
+                    "state": order.get("state", ""),
+                    "execution_state": derive_stock_execution_state(order),
+                    "created_at": order.get("created_at", ""),
+                    "last_transaction_at": order.get("last_transaction_at", ""),
+                    "first_execution_at": execution.get("timestamp", ""),
+                    "settlement_date": execution.get("settlement_date", ""),
+                    "quantity": order.get("quantity", ""),
+                    "filled_quantity": order.get("cumulative_quantity", ""),
+                    "average_price": order.get("average_price", ""),
+                    "limit_price": order.get("price", ""),
+                    "requested_notional_amount": money_amount(order.get("requested_notional_amount"))
+                    or money_amount(order.get("dollar_based_amount")),
+                    "executed_notional_amount": money_amount(order.get("executed_notional")),
+                    "fees": money_amount(order.get("fees")),
+                    "market_hours": order.get("market_hours", ""),
+                    "time_in_force": order.get("time_in_force", ""),
+                    "trigger": order.get("trigger", ""),
+                    "order_type": order.get("type", ""),
+                    "position_effect": order.get("position_effect", ""),
+                    "ref_id": order.get("ref_id", ""),
+                    "order_url": order.get("url", ""),
+                    "instrument_id": order.get("instrument_id", ""),
+                    "trade_date": (execution.get("timestamp") or order.get("last_transaction_at") or "")[:10],
+                }
+            )
 
             if len(executions) > 0:
                 trade_count += 1
-                fields[i + (page * 100)]["execution_state"] = ("completed", "partially filled")[
-                    order["cumulative_quantity"] < order["quantity"]
-                ]
-                fields[i + (page * 100)]["first_execution_at"] = executions[0]["timestamp"]
-                fields[i + (page * 100)]["settlement_date"] = executions[0]["settlement_date"]
-            elif order["state"] == "queued":
+            elif include_non_filled and order.get("state") == "queued":
                 queued_count += 1
 
         if current_orders["next"] is not None:
@@ -126,12 +170,14 @@ def build_stock_history_rows(robinhood, orders):
     return fields, trade_count, queued_count
 
 
-def export_stock_history(robinhood, debug=False, filename=None, prompt=True):
+def export_stock_history(robinhood, debug=False, filename=None, prompt=True, include_non_filled=False):
     print("Pulling trades. Please wait...")
     orders = robinhood.get_endpoint("orders")
     maybe_write_debug_file(debug, "debug.txt", orders)
 
-    fields, trade_count, queued_count = build_stock_history_rows(robinhood, orders)
+    fields, trade_count, queued_count = build_stock_history_rows(
+        robinhood, orders, include_non_filled=include_non_filled
+    )
     if trade_count > 0 or queued_count > 0:
         print(
             "%d queued trade%s and %d executed trade%s found in your account."
@@ -200,43 +246,60 @@ def export_dividends(robinhood, debug=False, filename=None, prompt=True):
 
 
 def build_options_history_rows(robinhood, orders):
-    fields = collections.defaultdict(dict)
+    fields = []
     trade_count = 0
     queued_count = 0
-    page = 0
-    row = 0
     current_orders = orders
 
     paginated = True
     while paginated:
-        for i, order in enumerate(current_orders["results"]):
+        for order in current_orders["results"]:
             for j, leg in enumerate(order["legs"]):
-                counter = row + (page * 100)
-                executions = leg["executions"]
+                executions = leg.get("executions", [])
+                execution = first_execution(executions)
                 contract = robinhood.get_custom_endpoint(leg["option"])
-                fields[counter]["Leg"] = j + 1
-                fields[counter]["Ticker"] = contract["chain_symbol"]
-                fields[counter]["Strike_price"] = contract["strike_price"]
-                fields[counter]["Expiration_date"] = contract["expiration_date"]
-                for key, value in enumerate(leg):
-                    if value != "executions":
-                        fields[counter][value] = leg[value]
-                for key, value in enumerate(order):
-                    if value != "legs":
-                        fields[counter][value] = order[value]
-                if order["state"] == "filled" and executions:
+                fields.append(
+                    {
+                        "order_id": order.get("id", ""),
+                        "leg": j + 1,
+                        "ticker": contract.get("chain_symbol", ""),
+                        "option_type": contract.get("type", ""),
+                        "expiration_date": contract.get("expiration_date", ""),
+                        "strike_price": contract.get("strike_price", ""),
+                        "side": leg.get("side", ""),
+                        "position_effect": leg.get("position_effect", ""),
+                        "state": order.get("state", ""),
+                        "created_at": order.get("created_at", ""),
+                        "trade_date": execution.get("trade_date", ""),
+                        "timestamp": execution.get("timestamp", ""),
+                        "settlement_date": execution.get("settlement_date", ""),
+                        "quantity": order.get("quantity", ""),
+                        "filled_quantity": order.get("processed_quantity", ""),
+                        "price_per_contract": order.get("price", ""),
+                        "average_net_premium_paid": order.get("average_net_premium_paid", ""),
+                        "premium": order.get("premium", ""),
+                        "net_amount": order.get("net_amount", ""),
+                        "change_in_buying_power": (
+                            order.get("processed_premium", "")
+                            if leg.get("side") == "sell"
+                            else "-" + order.get("processed_premium", "")
+                        ),
+                        "contract_fees": order.get("contract_fees", ""),
+                        "regulatory_fees": order.get("regulatory_fees", ""),
+                        "strategy": order.get("strategy", ""),
+                        "time_in_force": order.get("time_in_force", ""),
+                        "trigger": order.get("trigger", ""),
+                        "order_type": order.get("type", ""),
+                        "ref_id": order.get("ref_id", ""),
+                        "option_id": contract.get("id", ""),
+                        "option_url": leg.get("option", ""),
+                    }
+                )
+                if order.get("state") == "filled" and executions:
                     trade_count += 1
-                    for key, value in enumerate(executions[0]):
-                        fields[counter][value] = executions[0][value]
-                elif order["state"] == "queued":
+                elif order.get("state") == "queued":
                     queued_count += 1
-                if leg["side"] == "sell":
-                    fields[counter]["Change_in_Buying_Power"] = order["processed_premium"]
-                else:
-                    fields[counter]["Change_in_Buying_Power"] = "-" + order["processed_premium"]
-                row += 1
         if current_orders["next"] is not None:
-            page += 1
             current_orders = robinhood.get_custom_endpoint(str(current_orders["next"]))
         else:
             paginated = False

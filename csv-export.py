@@ -6,6 +6,7 @@ from dotenv import find_dotenv, load_dotenv
 from Robinhood import Robinhood
 from exporters import export_dividends
 from exporters import export_stock_history
+from profit_extractor import export_wash_sale_candidates
 from login_data import collect_login_data
 from profit_extractor import profit_extractor
 
@@ -29,6 +30,10 @@ parser.add_argument(
     '--profit', action='store_true', help='calculate profit for each sale')
 parser.add_argument(
     '--dividends', action='store_true', help='export dividend payments')
+parser.add_argument(
+    '--include-non-filled', action='store_true', help='include non-filled orders in the stock history export')
+parser.add_argument(
+    '--wash-sales', action='store_true', help='generate a wash-sale screening CSV from the stock history export')
 args = parser.parse_args()
 username = args.username
 password = args.password
@@ -50,7 +55,11 @@ logged_in = collect_login_data(
     access_token=access_token,
 )
 
-filename, _ = export_stock_history(robinhood=robinhood, debug=args.debug)
+filename, _ = export_stock_history(
+    robinhood=robinhood,
+    debug=args.debug,
+    include_non_filled=args.include_non_filled,
+)
 
 
 if args.dividends:
@@ -58,3 +67,6 @@ if args.dividends:
 
 if args.profit and filename:
     profit_csv = profit_extractor("", filename)
+
+if args.wash_sales and filename:
+    export_wash_sale_candidates(filename)

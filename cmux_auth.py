@@ -4,22 +4,32 @@ import json
 import os
 import re
 import subprocess
+import time
 
 
 AUTH_STATE_KEY = "web:auth_state"
 
 
 def run_cmux(args):
-    result = subprocess.run(
-        ["cmux"] + args,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode != 0:
+    attempts = 4
+    last_message = "cmux command failed"
+    for attempt in range(attempts):
+        result = subprocess.run(
+            ["cmux"] + args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+
         message = result.stderr.strip() or result.stdout.strip() or "cmux command failed"
-        raise RuntimeError(message)
-    return result.stdout.strip()
+        last_message = message
+        if "Failed to connect to socket" not in message or attempt == attempts - 1:
+            raise RuntimeError(message)
+        time.sleep(0.25 * (attempt + 1))
+
+    raise RuntimeError(last_message)
 
 
 def _normalize_eval_output(value):

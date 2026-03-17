@@ -6,9 +6,9 @@ import os
 from dotenv import find_dotenv, load_dotenv
 
 from Robinhood import Robinhood
-from cmux_auth import clear_cmux_auth
-from cmux_auth import clear_env_access_token
-from cmux_auth import get_cmux_access_token
+from browser_cookie_auth import available_browsers
+from browser_cookie_auth import clear_env_access_token
+from browser_cookie_auth import get_browser_access_token
 from exporters import export_dividends
 from exporters import export_options_history
 from exporters import export_options_holdings
@@ -24,9 +24,15 @@ def output_path(output_dir, filename):
 
 
 parser = argparse.ArgumentParser(
-    description="Export Robinhood data using a logged-in cmux browser surface"
+    description="Export Robinhood data using access tokens read from a local browser cookie store"
 )
-parser.add_argument("--cmux-surface", required=True, help="cmux browser surface, for example surface:13")
+parser.add_argument(
+    "--browser",
+    default="auto",
+    help="browser to read cookies from; default: auto. Choices: auto, {}".format(
+        ", ".join(available_browsers())
+    ),
+)
 parser.add_argument("--debug", action="store_true", help="store raw JSON output for each export")
 parser.add_argument(
     "--include-closed",
@@ -58,11 +64,6 @@ parser.add_argument(
     action="store_true",
     help="also generate a wash-sale screening CSV for stock history",
 )
-parser.add_argument(
-    "--keep-auth",
-    action="store_true",
-    help="keep the Robinhood auth state in the cmux browser instead of clearing it after export",
-)
 args = parser.parse_args()
 
 env_path = find_dotenv()
@@ -71,7 +72,8 @@ load_dotenv(env_path)
 if args.output_dir and not os.path.isdir(args.output_dir):
     os.makedirs(args.output_dir)
 
-token = get_cmux_access_token(args.cmux_surface)
+token, browser_name = get_browser_access_token(args.browser)
+print("Read Robinhood access token from {}.".format(browser_name))
 robinhood = Robinhood()
 
 cleanup_errors = []
@@ -135,26 +137,21 @@ try:
         export_wash_sale_candidates(stock_history_filename)
 
     print("Complete account export finished.")
+    print("Browser source: {}".format(browser_name))
     print("Trade history: {}".format(stock_history_filename or "not generated"))
     print("Options history: {}".format(options_history_filename or "not generated"))
     print("Stock holdings: {}".format(stock_holdings_filename or "not generated"))
     print("Options holdings: {}".format(options_holdings_filename or "not generated"))
 finally:
-    if not args.keep_auth:
-        try:
-            clear_cmux_auth(args.cmux_surface)
-            print("Cleared Robinhood auth state from {}.".format(args.cmux_surface))
-        except Exception as exc:
-            cleanup_errors.append("cmux browser cleanup failed: {}".format(exc))
+    try:
+        if clear_env_access_token(env_path):
+            print("Cleared RH_ACCESS_TOKEN in {}.".format(env_path))
+    except Exception as exc:
+        cleanup_errors.append("env cleanup failed: {}".format(exc))
 
-        try:
-            if clear_env_access_token(env_path):
-                print("Cleared RH_ACCESS_TOKEN in {}.".format(env_path))
-        except Exception as exc:
-            cleanup_errors.append("env cleanup failed: {}".format(exc))
+    if cleanup_errors:
+        print("Cleanup warnings:")
+        for message in cleanup_errors:
+            print("- {}".format(message))
 
-        if cleanup_errors:
-            print("Cleanup warnings:")
-            for message in cleanup_errors:
-                print("- {}".format(message))
-            print("This does not clear command history, tool logs, or previously approved command prefixes.")
+    print("Browser cookies were not modified. Log out of Robinhood in the browser when you are done.")
